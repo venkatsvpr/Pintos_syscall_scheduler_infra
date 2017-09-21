@@ -117,6 +117,29 @@ thread_start (void)
   sema_down (&idle_started);
 }
 
+void 
+thread_list_manipulate()
+{
+	struct list_elem *e;
+
+ 	ASSERT (intr_get_level () == INTR_OFF);
+
+  	for (e = list_begin (&all_list); e != list_end (&all_list);
+    	 e = list_next (e))
+    {
+    	struct thread *t = list_entry (e, struct thread, allelem);
+	  	if (t->timer_ticks >0)
+	  	{
+	  		t->timer_ticks --;
+			if (t->timer_ticks == 0)
+			{
+				thread_unblock(t);
+			}
+	  	}
+    }
+ 
+}
+
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
 void
@@ -134,7 +157,9 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-  /* Enforce preemption. */
+  thread_list_manipulate();
+
+/* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
 }
