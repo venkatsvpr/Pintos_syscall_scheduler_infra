@@ -89,23 +89,22 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
- 
-  if(ticks>0)
-  {
-	
-  
-  enum intr_level old_level;
- 
-  struct  thread *td = thread_current();
-  td->timer_ticks = ticks;
+	/* It is expected that the ticks is positive. */
+	if(ticks<=0)
+  	{
+		return;
+	}
 
-  old_level = intr_disable ();
-  thread_block();
-  intr_set_level (old_level);
-  }
-  else{
-    return;
-   }
+  	enum intr_level old_level;
+ 	struct  thread *td = thread_current();
+
+	td->timer_ticks = ticks;
+  	/* Disable and Re-enable the Interrups */
+	old_level = intr_disable ();
+ 	thread_block();
+  	intr_set_level (old_level);
+
+  	return;
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
