@@ -4,6 +4,7 @@
 #include <random.h>
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -11,6 +12,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -92,6 +94,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleep_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -117,27 +120,47 @@ thread_start (void)
   sema_down (&idle_started);
 }
 
+/* To check if the ticks of the thread is satisfied and to
+   move the thread to ready state. */
 void 
 thread_list_manipulate()
 {
 	struct list_elem *e;
 
- 	ASSERT (intr_get_level () == INTR_OFF);
+	ASSERT (intr_get_level () == INTR_OFF);
 
-  	for (e = list_begin (&all_list); e != list_end (&all_list);
-    	 e = list_next (e))
-    {
-    	struct thread *t = list_entry (e, struct thread, allelem);
-	  	if (t->timer_ticks >0)
-	  	{
-	  		t->timer_ticks --;
-			if (t->timer_ticks == 0)
-			{
-				thread_unblock(t);
-			}
-	  	}
-    }
- 
+    int64_t os_ticks = timer_ticks();
+   // printf("thread_list_manipulate - start - before loop\n");
+if(!list_empty(&sleep_list))
+{
+	//printf("sleep list size: %zu",list_size(&sleep_list));
+ // int i =0; 
+    for (e = list_begin (&sleep_list); e != list_end (&sleep_list);
+          e = list_next (e))
+     {
+	//	 printf("manipualte - loop inside - start : %d \n",i);
+         struct thread *t = list_entry (e, struct thread, sleepelem);
+	//	 printf("manipulatye - loop inside 2");
+//		    printf("after chang is : %"PRId64"/n",os_ticks);
+	//	 printf("os ticks: %"PRId64"\n",os_ticks);
+	//	 printf("thread tick: %"PRId64"\n",(int64_t)&t->timer_ticks);
+		 if((int64_t)&t->timer_ticks == os_ticks)
+		 {
+	//		printf("manipulate - loop - if \n");
+			t->timer_ticks = 0;
+			thread_unblock(t);
+			list_pop_front(&sleep_list);
+			e = list_begin(&sleep_list);	
+		 }		 
+		 else
+		 {
+	//		printf("manipulate - loop inside - else \n");
+			return;
+		 }
+     }
+} 
+	 
+  //	 printf("thread_list_manipulate - end - after loop");
 }
 
 /* Called by the timer interrupt handler at each timer tick.
@@ -146,7 +169,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
-
+//  printf("thread_tick - start\n");
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -156,9 +179,9 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
-
+ // printf("thread_tick - before manipulate \n");
   thread_list_manipulate();
-
+ // printf("thread_tick - after manipulate \n");
 /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
@@ -264,6 +287,7 @@ thread_block (void)
 void
 thread_unblock (struct thread *t) 
 {
+	printf("inside unblock \n");
   enum intr_level old_level;
 
   ASSERT (is_thread (t));
@@ -273,6 +297,7 @@ thread_unblock (struct thread *t)
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
+printf("end of unblock \n");
 }
 
 /* Returns the name of the running thread. */
@@ -484,6 +509,7 @@ is_thread (struct thread *t)
 static void
 init_thread (struct thread *t, const char *name, int priority)
 {
+  printf("inti_thread - start");
   ASSERT (t != NULL);
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);

@@ -20,6 +20,7 @@
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
+
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
@@ -89,15 +90,50 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
-  int64_t start = timer_ticks ();
+  /*Calculating the tick at which the thread should move to
+	ready queue*/		
+  int64_t td_ticks = timer_ticks () + ticks;
   enum intr_level old_level;
- 
+//  printf("timer_sleep start td_ticks: %"PRId64"\n",td_ticks); 
   struct  thread *td = thread_current();
-  td->timer_ticks = ticks;
+  td->timer_ticks = td_ticks;
+//  printf("td assigned ticks: %"PRId64"\n",td->timer_ticks);
+compute_minticks(&td);
+ // printf("timer_sleep - after compute");
 
   old_level = intr_disable ();
   thread_block();
   intr_set_level (old_level);
+}
+
+/* Function to compute the minimum ticks in sleep list threads */
+void compute_minticks(struct thread *t1)
+{
+printf("start - compute ticks\n");
+	struct list_elem *e;
+
+	if(list_empty(&sleep_list))
+	{
+		printf("compute minticks - if empty \n"); 
+
+   		list_push_back (&sleep_list, &t1->sleepelem);
+//		list_insert(list_tail(&sleep_list),&t1->sleepelem);
+		return;
+	}
+	for (e = list_begin (&sleep_list); e != list_end (&sleep_list);
+          e = list_next (e))
+     {
+		 printf("compute min ticks - for loop \n");
+         struct thread *t = list_entry (e, struct thread, sleepelem);
+		 if (t->timer_ticks > t1->timer_ticks)
+		 {
+		 	list_insert(&t->sleepelem, &t1->sleepelem);
+			break;
+		 }		 
+     }
+
+   //list_push_back (&ready_list, &t->elem);
+	
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
