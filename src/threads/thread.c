@@ -128,13 +128,14 @@ thread_list_manipulate()
     	 e = list_next (e))
     {
     	struct thread *t = list_entry (e, struct thread, allelem);
-	  	if (t->timer_ticks >0)
+		if (t->timer_ticks == 0)
+		{
+			continue;
+		}
+		else if (t->timer_ticks  <= timer_ticks())
 	  	{
-	  		t->timer_ticks --;
-			if (t->timer_ticks == 0)
-			{
-				thread_unblock(t);
-			}
+			t->timer_ticks = 0;
+			thread_unblock(t);
 	  	}
     }
  
@@ -368,7 +369,19 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+#if 0 
+	struct thread *running_thread = running_thread();
+	int running_priority = running_thread->priority;
+
+	if (new_priority < running_priority)
+	{
+		int ready_list_priority = get_ready_list_priority ();
+		if (ready_list_priority >
+		/* Preemption code here */
+	}
+#endif
+	thread_current ()->priority = new_priority;
+	return;
 }
 
 /* Returns the current thread's priority. */

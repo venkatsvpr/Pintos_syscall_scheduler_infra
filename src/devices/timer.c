@@ -87,7 +87,7 @@ timer_elapsed (int64_t then)
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
-timer_sleep (int64_t ticks) 
+timer_sleep (int64_t t_ticks) 
 {
 	/* It is expected that the ticks is positive. */
 	if(ticks<=0)
@@ -98,7 +98,7 @@ timer_sleep (int64_t ticks)
   	enum intr_level old_level;
  	struct  thread *td = thread_current();
 
-	td->timer_ticks = ticks;
+	td->timer_ticks = timer_ticks()+ t_ticks;
   	/* Disable and Re-enable the Interrups */
 	old_level = intr_disable ();
  	thread_block();
