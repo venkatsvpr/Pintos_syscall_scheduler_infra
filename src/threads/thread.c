@@ -30,6 +30,8 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+//static struct list sleep_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -95,7 +97,6 @@ thread_init (void)
   list_init (&ready_list);
   list_init (&all_list);
   list_init (&sleep_list);
-
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -125,42 +126,35 @@ thread_start (void)
 void 
 thread_list_manipulate()
 {
+	if (list_empty (&sleep_list))
+	{
+		return;
+	}
+
+	print_list_details(&sleep_list, 6);
 	struct list_elem *e;
+	int64_t curr_time = timer_ticks();
+ 	ASSERT (intr_get_level () == INTR_OFF);
 
-	ASSERT (intr_get_level () == INTR_OFF);
-
-    int64_t os_ticks = timer_ticks();
-   // printf("thread_list_manipulate - start - before loop\n");
-if(!list_empty(&sleep_list))
-{
-	//printf("sleep list size: %zu",list_size(&sleep_list));
- // int i =0; 
-    for (e = list_begin (&sleep_list); e != list_end (&sleep_list);
-          e = list_next (e))
-     {
-	//	 printf("manipualte - loop inside - start : %d \n",i);
-         struct thread *t = list_entry (e, struct thread, sleepelem);
-	//	 printf("manipulatye - loop inside 2");
-//		    printf("after chang is : %"PRId64"/n",os_ticks);
-	//	 printf("os ticks: %"PRId64"\n",os_ticks);
-	//	 printf("thread tick: %"PRId64"\n",(int64_t)&t->timer_ticks);
-		 if((int64_t)&t->timer_ticks == os_ticks)
-		 {
-	//		printf("manipulate - loop - if \n");
+  	for (e = list_begin (&sleep_list); e != list_end (&sleep_list);
+    	 e = list_next (e))
+    {
+    	struct thread *t = list_entry (e, struct thread, sleep_elem);
+#if 0
+		if (t->timer_ticks == 0)
+		{
+			continue;
+		}
+		else 
+#endif
+		if (t->timer_ticks  == curr_time)
+	  	{
+			list_remove(e);
 			t->timer_ticks = 0;
 			thread_unblock(t);
-			list_pop_front(&sleep_list);
-			e = list_begin(&sleep_list);	
-		 }		 
-		 else
-		 {
-	//		printf("manipulate - loop inside - else \n");
-			return;
-		 }
-     }
-} 
-	 
-  //	 printf("thread_list_manipulate - end - after loop");
+	  	}
+    }
+ 
 }
 
 /* Called by the timer interrupt handler at each timer tick.
@@ -389,11 +383,69 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+get_ready_list_priority()
+{
+	struct list_elem  *e;
+	e = list_begin (&ready_list);
+	struct thread *t = list_entry (e, struct thread, sleep_elem);
+	if (t != NULL)
+	{
+		printf  (" Thread priority :%d \r\n",t->priority);
+		return t->priority;
+	}
+
+	return 0;
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+#if 0 
+	struct thread *running_thread = running_thread();
+	int running_priority = running_thread->priority;
+	enum intr_level old_level;
+
+
+	if (new_priority < running_priority)
+	{
+		int ready_list_priority = get_ready_list_priority ();
+		if (ready_list_priority > new_priority)
+		{
+			/* Preemption code here */
+			old_level = intr_disable ();
+   			thread_block(); 
+  			intr_set_level (old_level);
+  
+
+
+		}
+
+
+    struct list_elem *e;
+
+    ASSERT (intr_get_level () == INTR_OFF);
+
+    for (e = list_begin (&all_list); e != list_end (&all_list);
+         e = list_next (e))
+    {
+        struct thread *t = list_entry (e, struct thread, allelem);
+        if (t->timer_ticks == 0)
+        {   
+            continue;
+        }
+        else if (t->timer_ticks  <= timer_ticks())
+        {
+            t->timer_ticks = 0;
+            thread_unblock(t);
+        }
+    }
+    
+
+	}
+#endif
+	thread_current ()->priority = new_priority;
+	return;
 }
 
 /* Returns the current thread's priority. */
@@ -635,4 +687,22 @@ allocate_tid (void)
 
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
+
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+void print_list_details(struct list *l1, int length)
+{
+	return;
+    struct list_elem *e;
+    int i=0;
+
+    printf("Thread details:\n");
+    for (e = list_begin (l1); e != list_end (l1) && i<length;
+           e = list_next (e))
+      {
+          struct thread *t = list_entry (e, struct thread, sleep_elem);
+          printf("tid :%d ",t->tid);
+          printf("priority :%d ",t->priority);
+          printf("threads ticks: %"PRId64" \r\n",t->timer_ticks);
+          i++;
+   }
+ }
