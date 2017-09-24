@@ -121,8 +121,6 @@ thread_start (void)
   sema_down (&idle_started);
 }
 
-/* To check if the ticks of the thread is satisfied and to
-   move the thread to ready state. */
 void 
 thread_list_manipulate()
 {
@@ -163,7 +161,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
-//  printf("thread_tick - start\n");
+
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -173,9 +171,9 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
- // printf("thread_tick - before manipulate \n");
+
   thread_list_manipulate();
- // printf("thread_tick - after manipulate \n");
+
 /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
@@ -281,7 +279,6 @@ thread_block (void)
 void
 thread_unblock (struct thread *t) 
 {
-	printf("inside unblock \n");
   enum intr_level old_level;
 
   ASSERT (is_thread (t));
@@ -291,7 +288,6 @@ thread_unblock (struct thread *t)
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
-printf("end of unblock \n");
 }
 
 /* Returns the name of the running thread. */
@@ -561,7 +557,6 @@ is_thread (struct thread *t)
 static void
 init_thread (struct thread *t, const char *name, int priority)
 {
-  printf("inti_thread - start");
   ASSERT (t != NULL);
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);

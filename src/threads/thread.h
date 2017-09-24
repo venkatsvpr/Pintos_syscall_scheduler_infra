@@ -103,17 +103,12 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
 	/* Used for holding the timer_tick */
 	int64_t	timer_ticks;
-	/* List element for sleep list */
-	struct list_elem sleepelem;
   };
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
-
-/* List of processes in sleep state.  */
-static struct list sleep_list;
 
 void thread_init (void);
 void thread_start (void);
