@@ -129,7 +129,6 @@ thread_list_manipulate()
 		return;
 	}
 
-	print_list_details(&sleep_list, 6);
 	struct list_elem *e;
 	int64_t curr_time = timer_ticks();
  	ASSERT (intr_get_level () == INTR_OFF);
@@ -248,7 +247,13 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-
+  
+  /* Yield the current thread if the new thread has higher priority */
+  struct thread *td = running_thread();
+  if (td->priority < priority)
+  {
+	thread_yield();
+  }
   return tid;
 }
 
@@ -285,7 +290,13 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
+#if 0
   list_push_back (&ready_list, &t->elem);
+#else
+  /* Insert based on priority*/
+  list_insert_ordered (&ready_list, &t->elem , (list_less_func *) &compare_elem_priority, NULL);
+#endif 
+
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -356,7 +367,11 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+  {
+	/* Insert based on priority */
+	list_insert_ordered (&ready_list, &cur->elem , (list_less_func *) &compare_elem_priority, NULL);
+  } 
+ 
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -378,69 +393,99 @@ thread_foreach (thread_action_func *func, void *aux)
       func (t, aux);
     }
 }
-
+int
 get_ready_list_priority()
 {
+	if (list_empty (&ready_list))
+		return 0;
 	struct list_elem  *e;
 	e = list_begin (&ready_list);
-	struct thread *t = list_entry (e, struct thread, sleep_elem);
+	struct thread *t = list_entry (e, struct thread,  elem);
 	if (t != NULL)
 	{
-		printf  (" Thread priority :%d \r\n",t->priority);
-		return t->priority;
+#if 0
+		printf  (" Thread priority :%d \r\n",t->r_priority);
+#endif
+		return t->r_priority;
 	}
-
 	return 0;
 }
+
+/* Return true if the thread->priority is equal to thread->r_priority  */
+bool
+is_thread_pri_same (struct thread *td)
+{
+	if (td->priority == td->r_priority)
+		return true;
+	return false;
+}
+
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
-#if 0 
-	struct thread *running_thread = running_thread();
-	int running_priority = running_thread->priority;
-	enum intr_level old_level;
+	struct thread *r_thread = running_thread();
+	int running_priority = r_thread->r_priority;
 
+#if 0
+	printf ("<%s:%d> new_pri :%d running:priority:%d \r\n",__func__,__LINE__,new_priority,running_priority);
+#endif
 
-	if (new_priority < running_priority)
+	int ready_list_priority = get_ready_list_priority ();
+
+	/* Change the r_priority only when both are same */
+	if (is_thread_pri_same(r_thread))
 	{
-		int ready_list_priority = get_ready_list_priority ();
+		thread_current ()->r_priority = new_priority;
+	}
+	/* This holds the actual value of the priority */
+	thread_current ()->priority = new_priority;
+
+	/* TODO-VENKAT - I feel more code is required here 
+     * lets take it up in the future */
+
+	if (ready_list_priority)
+	{
 		if (ready_list_priority > new_priority)
 		{
-			/* Preemption code here */
-			old_level = intr_disable ();
-   			thread_block(); 
-  			intr_set_level (old_level);
-  
-
-
+			thread_yield();
 		}
-
-
-    struct list_elem *e;
-
-    ASSERT (intr_get_level () == INTR_OFF);
-
-    for (e = list_begin (&all_list); e != list_end (&all_list);
-         e = list_next (e))
-    {
-        struct thread *t = list_entry (e, struct thread, allelem);
-        if (t->timer_ticks == 0)
-        {   
-            continue;
-        }
-        else if (t->timer_ticks  <= timer_ticks())
-        {
-            t->timer_ticks = 0;
-            thread_unblock(t);
-        }
-    }
-    
-
 	}
+	
+#if 0
+
+
+	else if (is_thread_rpri_big(r_thread))
+	{
+		if (ready_list_priority > running_priority)
+		{
+			thread_yield();
+		}
+		thread_current ()->priority = new_priority;
+	}
+	else if (is_thread_pri_big(r_thread))
+	{
+		if (ready_list_priority >
+	}
+	/* If new priority is greater, we need not do anyting */	
+	if (new_priority < running_priority)
+	{
+		/* Check if some thread in the list has higher priority */
+		if (ready_list_priority > new_priority)
+		{
+#if 0
+			printf ("<%s:%d> Blocking the current thread .. \r\n",__func__,__LINE__);
 #endif
+			thread_yield();
+		}
+	}
+
+	if (thread_current ()->priority == thread_current ()->r_priority)
+	{
+		thread_current ()->priority = new_priority;
 	thread_current ()->priority = new_priority;
+#endif
 	return;
 }
 
@@ -565,6 +610,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
+  t->r_priority = priority;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
@@ -701,3 +747,28 @@ void print_list_details(struct list *l1, int length)
           i++;
    }
  }
+
+
+/* Comparison function used for sorting. */
+
+bool
+compare_elem_priority (const struct list_elem *e1, const struct list_elem *e2, void *aux UNUSED)
+{
+	/* Get the thread and compare and return */
+	const struct thread *t1 = list_entry (e1, struct thread, elem);
+	const struct thread *t2 = list_entry (e2, struct thread, elem);
+
+	if ((t1 == NULL) || (t2 == NULL)) 
+	{
+		/* TODO-VENKAT write some meaningfull message here */       
+		printf (" <%s:%d> Not expected very bad \r\n",__func__,__LINE__);
+		return false;
+	}       
+
+	if (t1->r_priority > t2->r_priority)
+	{
+		return true;
+	}
+
+	return false;
+}

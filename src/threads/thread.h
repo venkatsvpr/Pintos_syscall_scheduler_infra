@@ -88,6 +88,7 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+	int r_priority;						/* This is the running priority */
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -143,4 +144,6 @@ int thread_get_load_avg (void);
 
 struct list sleep_list;
 void print_list_details(struct list *l1, int length);
+bool compare_elem_priority (const struct list_elem *e1, const struct list_elem *e2, void *aux UNUSED);
+void list_push_priority (struct list *list, struct list_elem *elem);
 #endif /* threads/thread.h */
