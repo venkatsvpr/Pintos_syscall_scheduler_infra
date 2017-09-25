@@ -17,6 +17,7 @@
 #error TIMER_FREQ <= 1000 recommended
 #endif
 
+
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
@@ -84,16 +85,66 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
+
+void 
+add_thread_to_sleep_list (struct thread *td)
+{
+	
+	print_list_details(&sleep_list, 6);
+	if (list_empty (&sleep_list))
+	{
+		list_push_back(&sleep_list, &td->sleep_elem);
+	}
+	else
+	{
+		struct list_elem *e;
+
+    	for (e = list_begin (&sleep_list); e != list_end (&sleep_list);
+        	 e = list_next (e))
+    	{	
+        	struct thread *t = list_entry (e, struct thread, allelem);
+	
+			if (td->timer_ticks < t->timer_ticks)
+			{
+				list_insert(&t->sleep_elem,&td->sleep_elem);	
+				return;
+			}
+    	}
+
+		/* If no case is matching then it is last eelment*/
+		list_push_back (&sleep_list, &td->sleep_elem);
+	}
+	return;
+}
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
-timer_sleep (int64_t ticks) 
+timer_sleep (int64_t t_ticks) 
 {
-  int64_t start = timer_ticks ();
+	/* It is expected that the ticks is positive. */
+	if(t_ticks<=0)
+  	{
+		return;
+	}
 
-  ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+	if ((sleep_list.head.next == NULL) &&
+		(sleep_list.tail.prev == NULL))
+	{
+		printf ("\r\\n Noth next and prev pints are null \r\n");
+	}
+ 	struct  thread *td = thread_current();
+	enum intr_level old_level;
+
+	td->timer_ticks = timer_ticks()+ t_ticks;
+	/* Add the td to a sleep list */
+
+  	/* Disable and Re-enable the Interrups */
+	old_level = intr_disable ();
+	add_thread_to_sleep_list(td);
+	thread_block();
+  	intr_set_level (old_level);
+
+  	return;
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
