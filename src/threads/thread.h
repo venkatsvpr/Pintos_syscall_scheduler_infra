@@ -143,7 +143,8 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 struct list sleep_list;
+
+
 void print_list_details(struct list *l1, int length);
 bool compare_elem_priority (const struct list_elem *e1, const struct list_elem *e2, void *aux UNUSED);
-void list_push_priority (struct list *list, struct list_elem *elem);
 #endif /* threads/thread.h */
