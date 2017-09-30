@@ -494,6 +494,12 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void) 
 {
+  return thread_current ()->r_priority;
+}
+
+int
+thread_get_orig_priority (void) 
+{
   return thread_current ()->priority;
 }
 
@@ -772,4 +778,43 @@ compare_elem_priority (const struct list_elem *e1, const struct list_elem *e2, v
 	}
 
 	return false;
+}
+
+/* Donate the running thread priority to that the td */
+void
+donate_priority (struct thread *td)
+{
+	if (list_empty(&ready_list))
+	{
+		return;
+	}
+	
+	if (td->r_priority < ((struct thread *)running_thread())->r_priority)
+	{
+		list_remove(&td->elem);	
+		td->r_priority = ((struct thread *)running_thread())->r_priority;	
+		list_insert_ordered (&ready_list, &(td->elem) , (list_less_func *) &compare_elem_priority, NULL);
+	}		
+	return;
+}
+/* Clear the td thread_priority and replace it by
+ * the original priority 
+ */
+void
+clear_donated_priority (struct thread *td)
+{
+	bool yield_required = 0;
+
+	if (list_empty(&ready_list))
+		return;
+
+	if (td->r_priority != td->priority)
+		yield_required = 1;
+
+	td->r_priority = td->priority;
+
+	if (yield_required == 1)
+		thread_yield();
+
+	return;
 }

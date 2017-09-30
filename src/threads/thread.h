@@ -147,4 +147,8 @@ struct list sleep_list;
 
 void print_list_details(struct list *l1, int length);
 bool compare_elem_priority (const struct list_elem *e1, const struct list_elem *e2, void *aux UNUSED);
+
+
+void donate_priority (struct thread *td);
+void clear_donate_priority(struct thread *td);
 #endif /* threads/thread.h */
