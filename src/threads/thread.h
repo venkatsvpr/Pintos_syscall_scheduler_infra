@@ -89,10 +89,12 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
 	int r_priority;						/* This is the running priority */
-    struct list_elem allelem;           /* List element for all threads list. */
+	int history_priority[8];   
+ 	struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+
 
     struct list_elem sleep_elem;              /* Sleep List element. */
 #ifdef USERPROG
@@ -104,7 +106,13 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
 	/* Used for holding the timer_tick */
 	int64_t	timer_ticks;
+	struct lock *lock_waiting;
   };
+
+
+/* List of processes in THREAD_READY state, that is, processes
+   that are ready to run but not actually running. */
+struct list ready_list;
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -149,6 +157,8 @@ void print_list_details(struct list *l1, int length);
 bool compare_elem_priority (const struct list_elem *e1, const struct list_elem *e2, void *aux UNUSED);
 
 
-void donate_priority (struct thread *td);
+void donate_priority (void);
 void clear_donate_priority(struct thread *td);
+
+void print_elements (struct list *anylist);
 #endif /* threads/thread.h */
