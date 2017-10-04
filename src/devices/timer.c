@@ -57,7 +57,7 @@ timer_calibrate (void)
       loops_per_tick <<= 1;
       ASSERT (loops_per_tick != 0);
     }
-
+ 
   /* Refine the next 8 bits of loops_per_tick. */
   high_bit = loops_per_tick;
   for (test_bit = high_bit >> 1; test_bit != high_bit >> 10; test_bit >>= 1)
@@ -208,7 +208,7 @@ timer_print_stats (void)
 {
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
