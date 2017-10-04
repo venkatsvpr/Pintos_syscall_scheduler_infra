@@ -1,4 +1,5 @@
 #ifndef THREADS_THREAD_H
+
 #define THREADS_THREAD_H
 
 #include <debug.h>
@@ -95,6 +96,10 @@ struct thread
     struct list_elem elem;              /* List element. */
 
     struct list_elem sleep_elem;              /* Sleep List element. */
+
+#ifdef VENKAT
+	struct list_elem priority_elem;		/* priority list elem for mlfq */
+#endif
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -104,6 +109,10 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
 	/* Used for holding the timer_tick */
 	int64_t	timer_ticks;
+	/* Nice value of thread */
+	int nice;
+	/* Recent CPU value of a thread*/
+	int recent_cpu;
   };
 
 /* If false (default), use round-robin scheduler.
@@ -115,13 +124,14 @@ void thread_init (void);
 void thread_start (void);
 
 void thread_tick (void);
-void thread_print_stats (void);
 
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
+void thread_print_stats (void) ;
+
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
@@ -144,7 +154,10 @@ int thread_get_load_avg (void);
 
 struct list sleep_list;
 
+/* Load average */
+static int load_avg = 0;
 
 void print_list_details(struct list *l1, int length);
 bool compare_elem_priority (const struct list_elem *e1, const struct list_elem *e2, void *aux UNUSED);
 #endif /* threads/thread.h */
+

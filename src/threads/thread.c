@@ -12,11 +12,13 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/fixed_point.h"
 #include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
 
+#define SHIFT_LEFT 14
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
@@ -97,7 +99,7 @@ thread_init (void)
   list_init (&ready_list);
   list_init (&all_list);
   list_init (&sleep_list);
-
+  
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -138,13 +140,6 @@ thread_list_manipulate()
     	 e = list_next (e))
     {
     	struct thread *t = list_entry (e, struct thread, sleep_elem);
-#if 0
-		if (t->timer_ticks == 0)
-		{
-			continue;
-		}
-		else 
-#endif
 		if (t->timer_ticks  == curr_time)
 	  	{
 			list_remove(e);
@@ -174,9 +169,50 @@ thread_tick (void)
 
   thread_list_manipulate();
 
+  /* MLFQ calculation for every 4 ticks*/
+  if(thread_mlfqs)
+  {
+  	get_mlfq_calculation();
+  	if(timer_ticks() % TIMER_FREQ != 0)
+  	{
+	   if(t != idle_thread)	
+		t->recent_cpu = add_int_fixed(t->recent_cpu , 1);
+  	}
+  }
+
 /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
+}
+
+/* get MLFQ calculations*/
+void
+get_mlfq_calculation()
+{
+	if(timer_ticks () % 4 == 0)
+     {
+		 struct list_elem *e;   
+         bool is_onesec = false;
+         if(timer_ticks () % TIMER_FREQ == 0)
+         {   
+             is_onesec = true;
+             thread_set_load_avg();
+         }
+         for (e = list_begin (&all_list); e != list_end (&all_list);
+              e = list_next (e))
+         {   
+             struct thread *t = list_entry (e, struct thread, allelem);
+			 if (t != idle_thread)
+			 {
+	     		if(is_onesec)
+             	{   
+                	 t->recent_cpu = thread_set_recent_cpu(t);
+             	}
+             	t->priority = thread_get_mlfq_priority(t); 
+		 	 }
+         }
+		 list_sort(&ready_list, (list_less_func *) &compare_elem_priority, NULL);
+     }
 }
 
 /* Prints thread statistics. */
@@ -255,6 +291,7 @@ thread_create (const char *name, int priority,
   {
 	thread_yield();
   }
+  
   return tid;
 }
 
@@ -291,12 +328,15 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-#if 0
-  list_push_back (&ready_list, &t->elem);
-#else
   /* Insert based on priority*/
-  list_insert_ordered (&ready_list, &t->elem , (list_less_func *) &compare_elem_priority, NULL);
-#endif 
+  if(!thread_mlfqs)
+  	list_insert_ordered (&ready_list, &t->elem , (list_less_func *) &compare_elem_priority, NULL);
+
+  /* Insert based on priority to priority queue for MLFQ */
+  if(thread_mlfqs)
+  {
+  	list_insert_ordered (&ready_list, &t->elem , (list_less_func *) &compare_elem_priority, NULL);
+  }
 
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -370,7 +410,13 @@ thread_yield (void)
   if (cur != idle_thread) 
   {
 	/* Insert based on priority */
-	list_insert_ordered (&ready_list, &cur->elem , (list_less_func *) &compare_elem_priority, NULL);
+    if(!thread_mlfqs)
+		list_insert_ordered (&ready_list, &cur->elem , (list_less_func *) &compare_elem_priority, NULL);
+
+	if(thread_mlfqs)
+	{
+		list_insert_ordered (&ready_list, &cur->elem , (list_less_func *) &compare_elem_priority, NULL);
+	} 
   } 
  
   cur->status = THREAD_READY;
@@ -404,9 +450,6 @@ get_ready_list_priority()
 	struct thread *t = list_entry (e, struct thread,  elem);
 	if (t != NULL)
 	{
-#if 0
-		printf  (" Thread priority :%d \r\n",t->r_priority);
-#endif
 		return t->r_priority;
 	}
 	return 0;
@@ -429,10 +472,6 @@ thread_set_priority (int new_priority)
 	struct thread *r_thread = running_thread();
 	int running_priority = r_thread->r_priority;
 
-#if 0
-	printf ("<%s:%d> new_pri :%d running:priority:%d \r\n",__func__,__LINE__,new_priority,running_priority);
-#endif
-
 	int ready_list_priority = get_ready_list_priority ();
 
 	/* Change the r_priority only when both are same */
@@ -454,39 +493,6 @@ thread_set_priority (int new_priority)
 		}
 	}
 	
-#if 0
-
-
-	else if (is_thread_rpri_big(r_thread))
-	{
-		if (ready_list_priority > running_priority)
-		{
-			thread_yield();
-		}
-		thread_current ()->priority = new_priority;
-	}
-	else if (is_thread_pri_big(r_thread))
-	{
-		if (ready_list_priority >
-	}
-	/* If new priority is greater, we need not do anyting */	
-	if (new_priority < running_priority)
-	{
-		/* Check if some thread in the list has higher priority */
-		if (ready_list_priority > new_priority)
-		{
-#if 0
-			printf ("<%s:%d> Blocking the current thread .. \r\n",__func__,__LINE__);
-#endif
-			thread_yield();
-		}
-	}
-
-	if (thread_current ()->priority == thread_current ()->r_priority)
-	{
-		thread_current ()->priority = new_priority;
-	thread_current ()->priority = new_priority;
-#endif
 	return;
 }
 
@@ -497,37 +503,77 @@ thread_get_priority (void)
   return thread_current ()->priority;
 }
 
+/* Calculates and Returns priority of a thread in MLFQ scheduling */
+int
+thread_get_mlfq_priority(struct thread *t)
+{
+	int pri = fixed_to_int(sub_int_fixed (sub_fixed (int_to_fixed (PRI_MAX), div_int_fixed (t->recent_cpu, 4)), 2 * t->nice));
+	if(pri < PRI_MIN)
+	{
+		pri = PRI_MIN;
+	}
+	else if(pri > PRI_MAX)
+	{
+		pri = PRI_MAX;
+	}
+	
+	return pri;
+}
+
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int new_nice) 
 {
-  /* Not yet implemented. */
+  thread_current()->nice = new_nice;
+  thread_current()->priority = thread_get_mlfq_priority(thread_current());
+  int max_priority = -1;
+  
+  if(!list_empty(&ready_list))
+		max_priority = list_entry(list_begin(&ready_list),struct thread, elem)->priority;
+  
+  if(max_priority > thread_current()->priority)
+	thread_yield();
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
-/* Returns 100 times the system load average. */
+/* Sets the system load average */
 int
-thread_get_load_avg (void) 
+thread_set_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+ size_t ready_threads = list_size(&ready_list);
+    if(thread_current() != idle_thread)
+        ready_threads++; 
+  load_avg = add_fixed(div_int_fixed(mul_int_fixed(load_avg, 59), 60), div_int_fixed(int_to_fixed(ready_threads), 60));
 }
 
-/* Returns 100 times the current thread's recent_cpu value. */
+/*Returns 100 times the system load average */
+int 
+thread_get_load_avg (void)
+{
+    return roundoff(mul_int_fixed(load_avg, 100));
+}
+
+/* Returns 100 times the thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+    return roundoff(mul_int_fixed(thread_current()->recent_cpu, 100));
 }
-
+
+/* To set recent cpu for a thread*/
+int
+thread_set_recent_cpu (struct thread *t)
+{
+	int r_cpu = add_int_fixed(mul_fixed(div_fixed(mul_int_fixed(load_avg, 2), add_int_fixed(mul_int_fixed(load_avg, 2), 1)), t->recent_cpu), t->nice);
+	return r_cpu;
+}
+
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by
@@ -614,7 +660,27 @@ init_thread (struct thread *t, const char *name, int priority)
   t->r_priority = priority;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  list_push_back (&all_list, &t->allelem);
+   
+  /* init thread for MLFQ */
+  /*Setting values for initial thread for MLFQ implementation */
+
+if(thread_mlfqs)
+{
+  if(strcmp(name,"main") == 0)
+  {
+   t->recent_cpu = int_to_fixed(0);
+   t->nice = 0;
+   t->priority = thread_get_mlfq_priority(t);
+  }
+  else
+  {
+   t->recent_cpu = int_to_fixed(thread_current()->recent_cpu);
+   t->nice = thread_current()->nice;
+   t->priority = thread_get_mlfq_priority(t);
+  }
+}
+
+   list_push_back (&all_list, &t->allelem);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -638,7 +704,7 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list))
+  if(list_empty (&ready_list))
     return idle_thread;
   else
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
@@ -654,8 +720,8 @@ next_thread_to_run (void)
    the first time a thread is scheduled it is called by
    switch_entry() (see switch.S).
 
-   It's not safe to call printf() until the thread switch is
-   complete.  In practice that means that printf()s should be
+   It's not safe to call printf until the thread switch is
+   complete.  In practice that means that printfs should be
    added at the end of the function.
 
    After this function and its caller returns, the thread switch
@@ -695,7 +761,7 @@ thread_schedule_tail (struct thread *prev)
    running to some other state.  This function finds another
    thread to run and switches to it.
 
-   It's not safe to call printf() until thread_schedule_tail()
+   It's not safe to call printf until thread_schedule_tail()
    has completed. */
 static void
 schedule (void) 
@@ -737,14 +803,10 @@ void print_list_details(struct list *l1, int length)
     struct list_elem *e;
     int i=0;
 
-    printf("Thread details:\n");
     for (e = list_begin (l1); e != list_end (l1) && i<length;
            e = list_next (e))
       {
           struct thread *t = list_entry (e, struct thread, sleep_elem);
-          printf("tid :%d ",t->tid);
-          printf("priority :%d ",t->priority);
-          printf("threads ticks: %"PRId64" \r\n",t->timer_ticks);
           i++;
    }
  }
@@ -762,9 +824,21 @@ compare_elem_priority (const struct list_elem *e1, const struct list_elem *e2, v
 	if ((t1 == NULL) || (t2 == NULL)) 
 	{
 		/* TODO-VENKAT write some meaningfull message here */       
-		printf (" <%s:%d> Not expected very bad \r\n",__func__,__LINE__);
+		//PF (" <%s:%d> Not expected very bad \r\n",__func__,__LINE__);
 		return false;
 	}       
+
+	if (thread_mlfqs)
+	{
+		if (t1->priority > t2->priority)
+		{
+			return true;
+		}
+		else
+		{
+			return false;
+		}
+	}
 
 	if (t1->r_priority > t2->r_priority)
 	{
@@ -773,3 +847,4 @@ compare_elem_priority (const struct list_elem *e1, const struct list_elem *e2, v
 
 	return false;
 }
+
