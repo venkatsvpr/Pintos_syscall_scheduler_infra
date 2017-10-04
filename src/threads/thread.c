@@ -24,10 +24,6 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
-/* List of processes in THREAD_READY state, that is, processes
-   that are ready to run but not actually running. */
-static struct list ready_list;
-
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
@@ -68,7 +64,7 @@ bool thread_mlfqs;
 static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
-static struct thread *running_thread (void);
+struct thread *running_thread (void);
 static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
 static bool is_thread (struct thread *) UNUSED;
@@ -140,6 +136,7 @@ thread_list_manipulate()
     	 e = list_next (e))
     {
     	struct thread *t = list_entry (e, struct thread, sleep_elem);
+
 		if (t->timer_ticks  == curr_time)
 	  	{
 			list_remove(e);
@@ -280,11 +277,10 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-  intr_set_level (old_level);
-
   /* Add to run queue. */
   thread_unblock (t);
   
+  intr_set_level (old_level);
   /* Yield the current thread if the new thread has higher priority */
   struct thread *td = running_thread();
   if (td->priority < priority)
@@ -500,6 +496,12 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void) 
 {
+  return thread_current ()->r_priority;
+}
+
+int
+thread_get_orig_priority (void) 
+{
   return thread_current ()->priority;
 }
 
@@ -660,6 +662,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->r_priority = priority;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+
    
   /* init thread for MLFQ */
   /*Setting values for initial thread for MLFQ implementation */
@@ -844,7 +847,151 @@ compare_elem_priority (const struct list_elem *e1, const struct list_elem *e2, v
 	{
 		return true;
 	}
-
+	
+	if (t1->r_priority == t2->priority)
+	{	
+		if (t1->priority > t2->priority)
+		{
+			return true;
+		}
+	}
 	return false;
 }
 
+void 
+insert_priority_to_thread(struct thread *td, int priority)
+{
+	for (int i=0; i<8; i++)
+	{
+		if (td->history_priority[i] == 0)
+		{
+			td->history_priority[i] = priority;
+			return;
+		}	
+	}	
+	return;
+}
+
+/* Donate the running thread priority to that the td */
+void
+donate_priority (void)
+{
+	struct thread *tr = running_thread();
+	struct lock *lock =  tr->lock_waiting;
+
+	if (list_empty(&ready_list))
+	{
+		return;
+	}
+
+	int depth = 8;
+	while (depth)
+	{
+		if(lock == NULL)
+			break;
+
+		if (tr->r_priority < lock->holder->r_priority)
+			break;
+ 
+		lock->holder->r_priority = tr->r_priority;
+		lock->donate_priority = tr->r_priority;
+
+		struct thread *temp = lock->holder;
+		list_remove(&temp->elem);	
+		temp->r_priority = tr->r_priority;
+
+#if 0
+		insert_priority_to_thread(temp, tr->r_priority);
+#endif
+		list_insert_ordered (&ready_list, &(temp->elem) , (list_less_func *) &compare_elem_priority, NULL);
+		
+		lock = temp->lock_waiting;
+		depth--;
+	}
+#if 0
+	if (lock->holder == NULL)
+		return;
+	
+	if (td->r_priority < ((struct thread *)running_thread())->r_priority)
+	{
+		list_remove(&td->elem);	
+		td->r_priority = ((struct thread *)running_thread())->r_priority;	
+		list_insert_ordered (&ready_list, &(td->elem) , (list_less_func *) &compare_elem_priority, NULL);
+	}		
+#endif
+	return;
+}
+
+void 
+clear_priority(struct thread *td, int priority)
+{
+
+	int max_priority = td->priority;
+#if 0
+	for (int i=0 ;i<8; i++)
+	{
+		if (td->history_priority[i]	== priority)
+		{
+			td->history_priority[i] = 0;
+			break;
+		}
+	}
+	for (int i=7; i>=0; i--)
+	{
+		if (td->history_priority[i])
+		{
+			if (max_priority < td->history_priority[i])
+			{
+				max_priority = td->history_priority[i];
+			}
+			return;
+		}
+	}
+#endif
+	td->r_priority = max_priority;
+	return;
+}
+/* Clear the td thread_priority and replace it by
+ * the original priority 
+ */
+void
+clear_donated_priority (struct thread *td, struct lock  *lk)
+{
+	bool yield_required = 0;
+	
+	if (td->priority == lk->donate_priority)
+		return;
+	
+	if ((lk->donate_priority != td->r_priority))
+		return;
+
+	if (list_empty(&ready_list))
+		return;
+
+	if (td->r_priority != td->priority)
+		yield_required = 1;
+
+	clear_priority(td, lk->donate_priority);
+	if (lk->donate_priority == td->priority)
+	{
+		lk->donate_priority = 0;
+	}
+
+	if (yield_required == 1)
+		thread_yield();
+
+	return;
+}
+/* Used to print_elements */
+void print_elements (struct list *anylist)
+{
+	struct list_elem *e;
+	for (e = list_begin (anylist); e != list_end (anylist);
+    	 e = list_next (e))
+	{    	
+		struct thread *td = list_entry (e, struct thread, elem);
+//   		printf("-tid:%d p:%d rp:%d -->", td->tid,td->priority, td->r_priority);
+		printf (" - %s -->",td->name);
+	}
+	printf ("\r\n");
+}
