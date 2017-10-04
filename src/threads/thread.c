@@ -837,10 +837,7 @@ compare_elem_priority (const struct list_elem *e1, const struct list_elem *e2, v
 		{
 			return true;
 		}
-		else
-		{
-			return false;
-		}
+		return false;
 	}
 
 	if (t1->r_priority > t2->r_priority)
