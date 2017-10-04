@@ -9,6 +9,7 @@ struct semaphore
   {
     unsigned value;             /* Current value. */
     struct list waiters;        /* List of waiting threads. */
+	struct thread *holder;
   };
 
 void sema_init (struct semaphore *, unsigned value);
@@ -22,6 +23,8 @@ struct lock
   {
     struct thread *holder;      /* Thread holding lock (for debugging). */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
+	int donate_priority;
+ 	int donation_list[10];
   };
 
 void lock_init (struct lock *);
