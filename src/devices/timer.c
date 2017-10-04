@@ -21,7 +21,6 @@
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
-
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
@@ -90,8 +89,6 @@ timer_elapsed (int64_t then)
 void 
 add_thread_to_sleep_list (struct thread *td)
 {
-	
-	print_list_details(&sleep_list, 6);
 	if (list_empty (&sleep_list))
 	{
 		list_push_back(&sleep_list, &td->sleep_elem);
@@ -103,7 +100,7 @@ add_thread_to_sleep_list (struct thread *td)
     	for (e = list_begin (&sleep_list); e != list_end (&sleep_list);
         	 e = list_next (e))
     	{	
-        	struct thread *t = list_entry (e, struct thread, allelem);
+        	struct thread *t = list_entry (e, struct thread, sleep_elem);
 	
 			if (td->timer_ticks < t->timer_ticks)
 			{
@@ -128,54 +125,18 @@ timer_sleep (int64_t t_ticks)
 		return;
 	}
 
-	if ((sleep_list.head.next == NULL) &&
-		(sleep_list.tail.prev == NULL))
-	{
-		printf ("\r\\n Noth next and prev pints are null \r\n");
-	}
  	struct  thread *td = thread_current();
 	enum intr_level old_level;
 
 	td->timer_ticks = timer_ticks()+ t_ticks;
-	/* Add the td to a sleep list */
 
-  	/* Disable and Re-enable the Interrups */
+	/* Disable and Re-enable the Interrups */
 	old_level = intr_disable ();
+	/* Add the td to a sleep list */
 	add_thread_to_sleep_list(td);
 	thread_block();
   	intr_set_level (old_level);
-
   	return;
-}
-
-/* Function to compute the minimum ticks in sleep list threads */
-void compute_minticks(struct thread *t1)
-{
-printf("start - compute ticks\n");
-	struct list_elem *e;
-
-	if(list_empty(&sleep_list))
-	{
-		printf("compute minticks - if empty \n"); 
-
-   		list_push_back (&sleep_list, &t1->sleepelem);
-//		list_insert(list_tail(&sleep_list),&t1->sleepelem);
-		return;
-	}
-	for (e = list_begin (&sleep_list); e != list_end (&sleep_list);
-          e = list_next (e))
-     {
-		 printf("compute min ticks - for loop \n");
-         struct thread *t = list_entry (e, struct thread, sleepelem);
-		 if (t->timer_ticks > t1->timer_ticks)
-		 {
-		 	list_insert(&t->sleepelem, &t1->sleepelem);
-			break;
-		 }		 
-     }
-
-   //list_push_back (&ready_list, &t->elem);
-	
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
