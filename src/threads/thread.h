@@ -120,7 +120,7 @@ struct thread
 	/* The next fd to be assigned for subsequent file open*/
  	int next_fd;
 	/* List of all the open file descriptors with file tables */
-	struct open_files;
+	struct list open_files;
   };
 
 
