@@ -662,7 +662,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->r_priority = priority;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-
+  t->net_fd = 3;
+  list_init(&t->open_files);
    
   /* init thread for MLFQ */
   /*Setting values for initial thread for MLFQ implementation */
