@@ -3,21 +3,24 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
 
 /* Syscall declarations */
 size_t  write(int fd, const void *buf, size_t count);
 void exit(int);
-
+bool create_file(const char *file_name, off_t initial_size);
+void close_file(int fd);
+bool remove_file(const char *file_name);
 /* Other function declarations */
 static void syscall_handler (struct intr_frame *);
 void get_arguments_from_stack (struct intr_frame *f, int *arg, int n);
 int add_file (struct file *f);
 struct file *get_file_from_fd (int fd);
-int close_file (int fd);
 
 
 /* lock */
-struct lock file_system_lock;
+struct lock *file_system_lock;
 struct file_entry
 {
 	int fd;
@@ -59,12 +62,24 @@ syscall_handler (struct intr_frame *f UNUSED)
 			break;
 
 		case SYS_CREATE:
+			get_arguments_from_stack(f,&arg,2);
+			lock_acquire(&file_system_lock);
+			f->eax = create_file((const char *)arg[0], (off_t) arg[1]);
+			lock_release(&file_system_lock);
 			break;
 
 		case SYS_REMOVE:
+			get_arguments_from_stack(f,&arg,1);
+			lock_acquire(&file_system_lock);
+			f->eax = remove_file((const char *)arg[0]);
+			lock_release(&file_system_lock);
 			break;
 
 		case SYS_OPEN:
+			get_arguments_from_stack(f,&arg,1);
+			lock_acquire(&file_system_lock);
+			f->eax = open_file((const char *)arg[0]);
+			lock_release(&file_system_lock);
 			break;
 
 		case SYS_FILESIZE:
@@ -85,6 +100,10 @@ syscall_handler (struct intr_frame *f UNUSED)
 			break;
 
 		case SYS_CLOSE:
+			get_arguments_from_stack(f,&arg,1);
+			lock_acquire(&file_system_lock);
+			close_file((int)arg[0]);
+			lock_release(&file_system_lock);
 			break;
 			
 		default:
@@ -135,6 +154,22 @@ write(int fd, const void *buf, size_t count)
 	return count; 
 }
 
+/* Create a file and return true if successful
+   else false */
+bool 
+create_file(const char *file_name, off_t initial_size)
+{
+	return filesys_create(file_name, initial_size);	
+}
+
+/* Removes a file and returns true if successful
+   else false */
+bool
+remove_file(const char *file_name)
+{
+	return filesys_remove(file_name);
+}
+
 int add_file (struct file *f)
 {
 	/* malloc the entry 
@@ -155,10 +190,47 @@ get_file_from_fd (int fd)
 		*/
 }
 
-int close_file (int fd)
+/* Closes a file and removes the fd from process fd list */
+void close_file (int fd)
 {
-	/* wiht fd loop through the thread
-	find the entry 
-	remove the file form the list and close
-	*/
+	struct thread *t = thread_current();
+	struct list_elem *e;
+	for (e = list_begin (&t->open_files); e != list_end (&t->open_files);
+         e = list_next (e))
+    {
+        struct file_entry *f = list_entry (e, struct file_entry, elem);
+		if(f->fd == fd)
+		{
+			file_close(f->file);
+			list_remove	(e);
+			break;
+		}
+	}
+
 }
+
+/* Opens a file and returns a fd if successful
+   else -1 */
+int
+open_file(const char *file_name)
+{
+	struct file *file = filesys_open(file_name);
+	if(file == NULL)
+		return -1;
+
+	else
+	{
+		struct thread *t1 = thread_current();
+		struct file_entry *f1;
+		f1->fd = t1->next_fd;
+		t1->next_fd++;
+		f1->file = file;
+		list_push_back(&t1->open_files,&f1->elem);
+		return f1->fd;
+	}
+}
+
+
+
+
+
