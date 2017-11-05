@@ -68,9 +68,13 @@ syscall_handler (struct intr_frame *f UNUSED)
 			break;
 
 		case SYS_FILESIZE:
+			get_arguments_from_stack(f,&arg,1);
+                        f->eax  = filesize((int)arg[0]);
 			break;
 
 		case SYS_READ:
+			get_arguments_from_stack(f,&arg,3);
+                        f->eax  = read((int)arg[0],(void *)arg[1],(size_t)arg[2]);
 			break;
 
 		case SYS_WRITE:
@@ -79,9 +83,13 @@ syscall_handler (struct intr_frame *f UNUSED)
 			break;
 
 		case SYS_SEEK:
+			get_arguments_from_stack(f,&arg,2);
+                        seek ((int)arg[0],(size_t)arg[1]);
 			break;
 
 		case SYS_TELL:
+			get_arguments_from_stack(f,&arg,1);
+                        f->eax  = tell((int)arg[0]);
 			break;
 
 		case SYS_CLOSE:
@@ -119,6 +127,8 @@ void exit(int status)
 	thread_exit();
 }
 
+/* Pratibha sys call starts */
+
 size_t 
 write(int fd, const void *buf, size_t count)
 {
@@ -127,13 +137,117 @@ write(int fd, const void *buf, size_t count)
 		putbuf (buf,count);
 		return count;
 	}
+	lock_acquire(&file_system_lock);
+	struct file *filename= get_file_from_fd(fd);
+
+	if(filename==NULL)
+	{
+		lock_release(&file_system_lock);
+		return -1;
+	}	
+
+	size_t count_t=file_write(filename,buf,count);
+	lock_release(&file_system_lock);
+    	return count_t; 
+}
+
+
+size_t 
+read (int fd, void *buf, size_t count)
+{
+	if (fd == 0)
+	{
+		size_t i;
+		uint8_t* temp=(uint8_t *) buf; 
+		for(i=0;i<count;i++)
+		{
+			temp[i]=input_getc();
+		}		
+		return i;
+	}
 
 	lock_acquire(&file_system_lock);
-	putbuf (buf,count);
-	lock_release(&file_system_lock);
+	struct file *filename= get_file_from_fd(fd);
 
-	return count; 
+	if(filename==NULL)
+	{
+		lock_release(&file_system_lock);
+		return -1;
+	}	
+
+	size_t count_t=file_read(filename,buf,count);
+	lock_release(&file_system_lock);
+	return count_t; 
 }
+
+void seek (int fd, size_t position)
+{
+	lock_acquire(&file_system_lock);
+	struct file *filename= get_file_from_fd(fd);
+
+	if(filename==NULL)
+	{
+		lock_release(&file_system_lock);
+		return;
+	}	
+
+	file_seek(filename,position);
+	lock_release(&file_system_lock);	
+}
+
+
+size_t tell (int fd)
+{
+	lock_acquire(&file_system_lock);
+	struct file *filename= get_file_from_fd(fd);
+
+	if(filename==NULL)
+	{
+		lock_release(&file_system_lock);
+		return -1;
+	}	
+
+	size_t position=file_tell(filename);
+	lock_release(&file_system_lock);	
+	return position;
+}
+
+size_t filesize (int fd)
+{
+	lock_acquire(&file_system_lock);
+	struct file *filename= get_file_from_fd(fd);
+	
+	if(filename==NULL)
+	{
+		lock_release(&file_system_lock);
+		return -1;
+	}	
+
+	size_t length=file_length(filename);
+	lock_release(&file_system_lock);	
+	return length;	
+}
+
+
+struct file* get_file_from_fd(int fd)
+{
+	struct thread *cur_thread=thread_current();
+	struct list_elem  *e;
+
+	for (e = list_begin (&cur_thread->open_files); e!=list_end(&cur_thread->open_files);e=list_next(e))
+	{
+		  struct file_entry *f = list_entry (e, struct file_entry, elem);
+		  if(f->fd==fd)
+		  	return (f->file);
+	}
+	return NULL;
+ }
+
+/* Pratibha sys call ends */
+
+
+
+
 
 int add_file (struct file *f)
 {
@@ -146,14 +260,6 @@ int add_file (struct file *f)
 
 }
 
-struct file *
-get_file_from_fd (int fd)
-{
-	
-	/* loop through the list entry o the threaadd
-		if some list entry matches return the file descriptor
-		*/
-}
 
 int close_file (int fd)
 {
