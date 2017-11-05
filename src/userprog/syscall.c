@@ -10,23 +10,19 @@
 size_t  write(int fd, const void *buf, size_t count);
 void exit(int);
 bool create_file(const char *file_name, off_t initial_size);
+int open_file(const char *file_name);
 void close_file(int fd);
 bool remove_file(const char *file_name);
+
 /* Other function declarations */
-static void syscall_handler (struct intr_frame *);
-void get_arguments_from_stack (struct intr_frame *f, int *arg, int n);
+static void syscall_handler (struct intr_frame *); 
+void get_arguments_from_stack (struct intr_frame *f, int *arg, int n); 
 int add_file (struct file *f);
 struct file *get_file_from_fd (int fd);
 
 
 /* lock */
 struct lock *file_system_lock;
-struct file_entry
-{
-	int fd;
-	struct file *file;
-	struct list_elem elem;
-};
 
 void
 syscall_init (void) 

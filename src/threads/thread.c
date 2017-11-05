@@ -14,6 +14,7 @@
 #include "threads/vaddr.h"
 #include "threads/fixed_point.h"
 #include "devices/timer.h"
+#include "userprog/syscall.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -389,6 +390,20 @@ thread_exit (void)
   intr_disable ();
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
+  
+  struct thread *t = thread_current();
+  struct lock *file_system_lock;
+  struct list_elem *e;
+  lock_acquire(&file_system_lock); 
+  for (e = list_begin (&t->open_files); e != list_end (&t->open_files);       
+	   e = list_next (e))
+  {
+      struct file_entry *f = list_entry (e, struct file_entry, elem);
+      file_close(f->file);
+      list_remove (e);
+  }
+  lock_release(&file_system_lock);
+
   schedule ();
   NOT_REACHED ();
 }
