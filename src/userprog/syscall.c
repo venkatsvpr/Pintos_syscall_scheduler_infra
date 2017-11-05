@@ -158,10 +158,9 @@ read (int fd, void *buf, size_t count)
 	if (fd == 0)
 	{
 		size_t i;
-		uint8_t* temp=(uint8_t *) buf; 
 		for(i=0;i<count;i++)
 		{
-			temp[i]=input_getc();
+			(char*)buf[i]=input_getc();
 		}		
 		return i;
 	}
