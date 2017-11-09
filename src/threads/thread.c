@@ -415,7 +415,6 @@ thread_exit (void)
   
   struct thread *t = thread_current();
   struct lock *file_system_lock;
-  struct list_elem *e;
   lock_acquire(&file_system_lock); 
   for (e = list_begin (&t->open_files); e != list_end (&t->open_files);       
 	   e = list_next (e))
