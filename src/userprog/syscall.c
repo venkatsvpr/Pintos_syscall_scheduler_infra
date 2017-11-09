@@ -5,7 +5,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
-#define USER_VADDR_BOTTOM ((void *) 0x08048000)
+#define USER_BOTTOM_ADDR ((void *) 0x08048000)
 
 /* Syscall declarations */
 void exit(int);
@@ -47,7 +47,17 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
+/*
+  
+  	if (!is_user_vaddr (p))
+    		exit(-1);
+  
+ 	if (*p < SYS_HALT || *p > SYS_INUMBER)
+		exit(-1);
 
+	if (!(is_user_vaddr (p + 1) && is_user_vaddr (p + 2) && is_user_vaddr (p + 3)))
+		exit(-1);
+*/
 	int syscall_code = *(int*) f->esp;
 	int arg[20];
 	//printf ("In syscall hanlder <%d>\r\n",syscall_code);
@@ -69,6 +79,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 		case SYS_EXEC:
 			get_arguments_from_stack (f, &arg, 1);
+			arg[0] = check_pointers((const void *) arg[0]);     // extra
 			f->eax = exec (arg[0]);
 			break;
 
@@ -79,19 +90,20 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 		case SYS_FILESIZE:
 			get_arguments_from_stack(f,&arg,1);
-            f->eax  = filesize((int)arg[0]);
+            		f->eax  = filesize((int)arg[0]);
 			break;
 
 		case SYS_READ:
 			get_arguments_from_stack(f,&arg,3);
-            buffer_validity((void *)arg[1], (int) arg[2]);
-            f->eax  = read((int)arg[0],(void *)arg[1],(size_t)arg[2]);
+            		buffer_validity((void *)arg[1], (int) arg[2]);        //extra
+			arg[1] = check_pointers((const void *) arg[1]);   //extra
+            		f->eax  = read((int)arg[0],(void *)arg[1],(size_t)arg[2]);
 			break;
 
 		case SYS_WRITE:
 			get_arguments_from_stack(f,&arg,3);
-			//printf ("<arguments:%d:%s:%d>\r\n",(int)arg[0],(char *)arg[1],(int)arg[2]);
-			buffer_validity((void *)arg[1], (int) arg[2]);
+			buffer_validity((void *)arg[1], (int) arg[2]);		//extra
+			arg[1] = check_pointers((const void *) arg[1]);	//extra
 			f->eax  = write ((int)arg[0],(const void *)arg[1],(size_t)arg[2]);
 			break;
 
@@ -114,6 +126,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 			
 		case SYS_CREATE:
 			get_arguments_from_stack(f,&arg,2);
+			arg[0] = check_pointers((const void *) arg[0]);    //extra
 			lock_acquire(&file_system_lock);
 			f->eax = create_file((const char *)arg[0], (int) arg[1]);
 			lock_release(&file_system_lock);
@@ -121,6 +134,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 		case SYS_REMOVE:
 			get_arguments_from_stack(f,&arg,1);
+			arg[0] = check_pointers((const void *) arg[0]);     //extra
 			lock_acquire(&file_system_lock);
 			f->eax = remove_file((const char *)arg[0]);
 			lock_release(&file_system_lock);
@@ -128,6 +142,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 		case SYS_OPEN:
 			get_arguments_from_stack(f,&arg,1);
+			arg[0] = check_pointers((const void *) arg[0]);   //extra
 			lock_acquire(&file_system_lock);
 			f->eax = open_file((const char *)arg[0]);
 			lock_release(&file_system_lock);
@@ -183,17 +198,17 @@ void pointer_validity (const void *ptr)
     return;
 }
 
-void buffer_validity (void* buff_ptr, unsigned size)
+void buffer_validity (void* buffer, size_t size)
 {
-	if (buff_ptr == NULL)
-	{
-		exit(ERROR);
-	}
-	char* t_buffer = (char *) buff_ptr;
-  	for ( int i = 0; i < size; i++)
+	char* local_buffer = (char *) buffer;
+  	for ( size_t i = 0; i < size; i++)
   	{
-  		pointer_validity ((const void*)  t_buffer);
-  		t_buffer++;
+		 if (!is_user_vaddr(local_buffer) || local_buffer < USER_BOTTOM_ADDR)
+    		{
+     			 exit(ERROR);
+	        }
+
+  		local_buffer++;
   	}
   	return;
 }
@@ -223,6 +238,8 @@ exec (const char *cmd_line)
 	int pid = process_execute(cmd_line);
 	return pid;
 }
+
+
 
 void exit_proc(int status)
 {
@@ -254,9 +271,6 @@ void exit_proc(int status)
 size_t 
 write(int fd, const void *buf, size_t count)
 {
-	if(buf == NULL)
-		exit(ERROR);
-
 	//printf ("In write system call:<%d><%s><%d>\r\n",fd,buf,count);
 	if (fd == 1)
 	{
@@ -367,12 +381,35 @@ struct file* get_file_from_fd(int fd)
 
 	for (e = list_begin (&cur_thread->open_files); e!=list_end(&cur_thread->open_files);e=list_next(e))
 	{
-		  struct file_entry *f = list_entry (e, struct file_entry, elem);
-		  if(f->fd==fd)
+		if(e==NULL)
+			continue;
+
+		struct file_entry *f = list_entry (e, struct file_entry, elem);
+		if(f==NULL)
+			continue;
+
+		if(f->fd==fd)
 		  	return (f->file);
 	}
 	return NULL;
 }
+
+
+int check_pointers(const void *ptr_addr)
+{
+	 if (!is_user_vaddr(ptr_addr) || ptr_addr < USER_BOTTOM_ADDR)
+   	 {
+     		 exit(ERROR);
+   	 }
+
+  	void *pointer = pagedir_get_page(thread_current()->pagedir, ptr_addr);
+  	if (!pointer)
+    	{
+     		 exit(ERROR);
+   	}
+  	return (int) pointer;
+}
+
 
 /* Pratibha sys call ends */
 
