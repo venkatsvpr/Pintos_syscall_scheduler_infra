@@ -8,7 +8,8 @@
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
-static void kill (struct intr_frame *);
+static void 
+kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 
 /* Registers handlers for interrupts that can be caused by user
@@ -89,7 +90,7 @@ kill (struct intr_frame *f)
       printf ("%s: dying due to interrupt %#04x (%s).\n",
               thread_name (), f->vec_no, intr_name (f->vec_no));
       intr_dump_frame (f);
-      thread_exit (); 
+	  exit(-1);
 
     case SEL_KCSEG:
       /* Kernel's code segment, which indicates a kernel bug.
@@ -98,8 +99,8 @@ kill (struct intr_frame *f)
          here.)  Panic the kernel to make the point.  */
       intr_dump_frame (f);
       PANIC ("Kernel bug - unexpected interrupt in kernel"); 
-
-    default:
+  
+	default:
       /* Some other code segment?  Shouldn't happen.  Panic the
          kernel. */
       printf ("Interrupt %#04x (%s) in unknown segment %04x\n",
@@ -156,6 +157,17 @@ page_fault (struct intr_frame *f)
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
           user ? "user" : "kernel");
-  kill (f);
+#if 0
+  /* VENKAT */
+  if (f->cs ==SEL_KCSEG)
+  {
+    f->eip = f->eax;
+    f->eax = 0xffffffff;
+  }
+  else
+#endif
+  {
+    kill (f);
+  }
 }
 

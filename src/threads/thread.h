@@ -5,6 +5,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include <kernel/list.h>
+#include <threads/synch.h>
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -14,6 +16,11 @@ enum thread_status
     THREAD_BLOCKED,     /* Waiting for an event to trigger. */
     THREAD_DYING        /* About to be destroyed. */
   };
+
+#if 0
+# define RET_STATUS_DEFAULT 1
+# define RET_STATUS_INVALID 2
+#endif
 
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
@@ -117,11 +124,29 @@ struct thread
 	int recent_cpu;
 	struct lock *lock_waiting;
 
-	/* The next fd to be assigned for subsequent file open*/
+  struct semaphore child_lock;
+  	/* The next fd to be assigned for subsequent file open*/
  	int next_fd;
 	/* List of all the open file descriptors with file tables */
 	struct list open_files;
+  int waitingon;
+	int exit_error;
+  struct list child_list;
+  struct thread* parent;
+  bool success;
   };
+
+
+
+  /* Entry to the child. Childs exit status */
+  struct child_entry
+  {
+      int tid;
+      struct list_elem elem;
+      int exit_error;
+      bool used;
+  };
+
 
 
 /* List of processes in THREAD_READY state, that is, processes

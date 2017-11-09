@@ -10,7 +10,6 @@
 #include "threads/intr-stubs.h"
 #include "threads/palloc.h"
 #include "threads/switch.h"
-#include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "threads/fixed_point.h"
 #include "devices/timer.h"
@@ -258,7 +257,18 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+  /* On thread create maintain the child pointer on the running thread
+   * will be used in wait
+   * TBD - need to be modularised looks messy */
 
+  struct child_entry * child_ptr  = malloc(sizeof(*child_ptr));
+  memset(child_ptr,0,sizeof(child_ptr));
+  struct thread *rtd = running_thread();
+  child_ptr->tid = tid;
+  child_ptr->exit_error = t->exit_error;
+  child_ptr->used = false;
+
+  list_push_back (&(rtd->child_list), &child_ptr->elem);
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
      member cannot be observed. */
@@ -279,17 +289,18 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-  /* Add to run queue. */
+/* Add to run queue. */
   thread_unblock (t);
-  
+
   intr_set_level (old_level);
-  /* Yield the current thread if the new thread has higher priority */
+
   struct thread *td = running_thread();
+ 
+  /* Yield the current thread if the new thread has higher priority */
   if (td->priority < priority)
   {
-	thread_yield();
+	   thread_yield();
   }
-  
   return tid;
 }
 
@@ -383,6 +394,17 @@ thread_exit (void)
 #ifdef USERPROG
   process_exit ();
 #endif
+  struct list_elem *e;
+  struct thread *td = thread_current();
+
+  for (e = list_begin (&(td->child_list)); e != list_end (&(td->child_list));
+       e = list_next (e))
+  {     
+    struct file_entry *f_entry = NULL;
+    f_entry =list_entry (e, struct thread, elem);
+   // if (f_entry != NULL)
+      //free(f_entry);
+  }
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
@@ -679,8 +701,14 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   t->next_fd = 3;
+
+  t->parent = running_thread();
+  t->exit_error = -100;
+  sema_init(&t->child_lock,0);
   list_init(&t->open_files);
-   
+  list_init (&t->child_list);
+  t->waitingon=0;
+  
   /* init thread for MLFQ */
   /*Setting values for initial thread for MLFQ implementation */
 
@@ -812,7 +840,7 @@ allocate_tid (void)
 
   return tid;
 }
-
+
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 
@@ -1009,3 +1037,14 @@ void print_elements (struct list *anylist)
 	}
 	printf ("\r\n");
 }
+
+#if 0 
+/* not used now */
+
+struct child_process *
+add_child_process(int pid)
+{
+
+
+}
+#endif
