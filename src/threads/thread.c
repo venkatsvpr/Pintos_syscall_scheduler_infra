@@ -15,6 +15,7 @@
 #include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #endif
 
 #define SHIFT_LEFT 14
@@ -382,18 +383,52 @@ thread_tid (void)
   return thread_current ()->tid;
 }
 
+void thread_exit2 (int code)
+{
+  //printf ("<%s:%d:%d>\r\n",__func__,__LINE__,code);
+  ASSERT (!intr_context ());
+  struct list_elem *e;
+  struct thread *td = thread_current();
+
+#ifdef USERPROG
+  process_exit (code);
+#endif
+  
+
+  for (e = list_begin (&(td->child_list)); e != list_end (&(td->child_list));
+       e = list_next (e))
+  {     
+    struct file_entry *f_entry = NULL;
+    f_entry =list_entry (e, struct thread, elem);
+   // if (f_entry != NULL)
+      //free(f_entry);
+  }
+
+  /* Remove thread from all threads list, set our status to dying,
+     and schedule another process.  That process will destroy us
+     when it calls thread_schedule_tail(). */
+  intr_disable ();
+  list_remove (&thread_current()->allelem);
+  thread_current ()->status = THREAD_DYING;
+  schedule ();
+  NOT_REACHED ();
+}
+
+
+
 /* Deschedules the current thread and destroys it.  Never
    returns to the caller. */
 void
 thread_exit (void) 
 {
   ASSERT (!intr_context ());
-
-#ifdef USERPROG
-  process_exit ();
-#endif
   struct list_elem *e;
   struct thread *td = thread_current();
+
+#ifdef USERPROG
+  process_exit (0);
+#endif
+  
 
   for (e = list_begin (&(td->child_list)); e != list_end (&(td->child_list));
        e = list_next (e))

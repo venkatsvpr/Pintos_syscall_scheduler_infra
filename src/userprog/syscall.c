@@ -6,7 +6,6 @@
 #include "threads/vaddr.h"
 
 #define USER_BOTTOM_ADDR ((void *) 0x08048000)
-
 /* Syscall declarations */
 void exit(int);
 int exec(const char *string);
@@ -47,6 +46,7 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
+	int return_value = 0;
 /*
   
   	if (!is_user_vaddr (p))
@@ -80,7 +80,21 @@ syscall_handler (struct intr_frame *f UNUSED)
 		case SYS_EXEC:
 			get_arguments_from_stack (f, &arg, 1);
 			arg[0] = check_pointers((const void *) arg[0]);     // extra
-			f->eax = exec (arg[0]);
+			return_value = exec (arg[0]);
+			struct thread *t=running_thread();
+
+			struct list_elem *e;
+			/* loop through the child list */
+  			for (e = list_begin (&(t->child_list)); e != list_end (&(t->child_list)); e = list_next (e))
+			  {
+    				struct child_entry *td = list_entry (e, struct child_entry, elem);
+   				if(td->tid == return_value)
+  				{
+					if (td->exit_error == -1)
+						return_value = -1;	
+    				}
+  			}
+			f->eax = return_value;
 			break;
 
 		case SYS_WAIT:
@@ -226,7 +240,9 @@ void exit(int status)
 {
 	/* VENKAT - Feel more code is required here */ 
 	printf ("%s: exit(%d)\n", thread_current()->name, status);
-	thread_exit();
+//	printf ("current value:%d:\r\n",thread_current()->exit_error);
+//	thread_current()->exit_error = status;
+	thread_exit2(status);
 }
 
 int

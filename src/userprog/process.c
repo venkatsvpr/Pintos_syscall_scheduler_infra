@@ -44,6 +44,7 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+ // printf ("<%s:%d> tid:%d\r\n",__func__,__LINE__,tid);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
 
@@ -76,9 +77,10 @@ start_process (void *file_name_)
   if (!success) 
   {
     palloc_free_page (file_name);
-	  thread_current()->parent->success=false;
-    sema_up(&thread_current()->parent->child_lock);
-    thread_exit ();
+    thread_current()->parent->success=false;
+    sema_up(&thread_current()->parent->child_lock); 
+    thread_exit2 (-1);   
+///  thread_exit ();
   }
   else
   {
@@ -136,7 +138,7 @@ process_wait (tid_t child_tid)
 
   int temp = t_child->exit_error;
   list_remove(temp_element);
-  
+  //printf ("Childid:%d-Error:%d\r\n",t_child->tid,temp); 
 return temp;
 
 }
@@ -144,16 +146,18 @@ return temp;
 
 /* Free the current process's resources. */
 void
-process_exit (void)
+process_exit (int code)
 {
+//printf ("<%s:%d>code:%d>\r\n",__func__,__LINE__,code);
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-  if(cur->exit_error==-100)
-    exit_proc(-1);
-
-  int exit_code = cur->exit_error;
-    //printf("%s: exit(%d)\n",cur->name,exit_code);
+  if (code !=0)
+  {
+	exit_proc(code);
+  }
+  else if (cur->exit_error==-100)
+     exit_proc(-1);
 
   filesys_lock();
   filesys_unlock();
